@@ -54,8 +54,9 @@ Vous avez maintenant créé et activé un environnement virtuel à utiliser pour
 
 Pour exécuter le code python, exécutez le fichier `run.bat` en double-cliquant dessus. La manette PS4 est facultative.
 Vous pourrez (sans la manette) contrôler l'avion en utilisant l'inteface graphique qui s'affichera à l'écran.
-![image info](./pictures/joystic.png)
 
+![image info](./pictures/joystic.png)
+*mini Interface graphique*
 
 
 # Connecter une manette PS4 au pc via bluetooth
@@ -65,7 +66,9 @@ Vous pourrez (sans la manette) contrôler l'avion en utilisant l'inteface graphi
 
 2. Ouvrir les paramètres bluetooth de votre pc et cliquer sur "Ajouter un appareil bluetooth ou un autre appareil".
 
-![image info](./pictures/ps4.png)
+![image info](./pictures/ps4.jpg)
+*activer le mode bluetooth de la manette PS4*
+
 
 
 3. Sélectionner "Wireless Controller" dans la liste des appareils disponibles.
