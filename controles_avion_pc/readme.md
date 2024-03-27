@@ -26,11 +26,6 @@ L'environnement virtuel (venv) est un outil qui permet d'isoler les dépendances
     nom_de_l_environnement\Scripts\activate
     ```
 
-  - Sur macOS/Linux :
-
-    ```bash
-    source nom_de_l_environnement/bin/activate
-    ```
 
 5. Une fois l'environnement virtuel activé, vous pouvez installer les dépendances spécifiques à votre projet en utilisant `pip`. Vous pouvez également installer les bibliothèques répertoriées dans le fichier `requirements.txt` en exécutant la commande suivante :
 
@@ -56,6 +51,7 @@ Pour exécuter le code python, exécutez le fichier `run.bat` en double-cliquant
 Vous pourrez (sans la manette) contrôler l'avion en utilisant l'inteface graphique qui s'affichera à l'écran.
 
 ![image info](./pictures/joystic.png)
+
 *mini Interface graphique*
 
 
@@ -67,6 +63,7 @@ Vous pourrez (sans la manette) contrôler l'avion en utilisant l'inteface graphi
 2. Ouvrir les paramètres bluetooth de votre pc et cliquer sur "Ajouter un appareil bluetooth ou un autre appareil".
 
 ![image info](./pictures/ps4.jpg)
+
 *activer le mode bluetooth de la manette PS4*
 
 
