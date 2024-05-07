@@ -31,7 +31,7 @@
               if (strcmp((char*)data, "ping") == 0) {
                   client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
               } else {
-                  // Conversion des données en int et mise à jour de la variable globale
+                  data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
                   ledValue = atoi((char*)data);  // Convertit les données en integer
               }
               break;
