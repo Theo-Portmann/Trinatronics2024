@@ -20,14 +20,17 @@ const char* password = "123456789";
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
-// Define of globale varibale
-int32_t u32JoystickValue = 0;    // take the websocket give-value
-
 // Pin definition 
-uint32_t u32Motor1 = 2;         // Define the pin to commande motor 1
-uint32_t u32Motor2 = 4;         // Define the pin to commande motor 2
-int32_t s32Channel1 = 0;         // PWM-channel for motor 1
-int32_t s32Channel2 = 0;         // PWM channel for motor 2
+uint16_t u16PinMotor1 = 2;         // Define the pin to commande motor 1, at left
+uint16_t u16PinMotor2 = 4;         // Define the pin to commande motor 2, at right
+int16_t s16Channel1 = 0;         // PWM-channel for motor 1
+int16_t s16Channel2 = 0;         // PWM channel for motor 2
+
+// Define of globale varibale
+uint16_t u16JoystickValue = 0;    // take the websocket give-value
+uint16_t u16MotorSpeed1 = 0;          // speed variable of motor 1
+uint16_t u16MotorSpeed2 = 0;          // speed variable of motor 2
+uint16_t u16DifferenceOfSpeed = 0;
 
 void setup() 
 {
@@ -43,76 +46,98 @@ void setup()
   server.addHandler(&ws);
   server.begin();  
   // Pin initialisation for motor
-  pinMode(u32Motor1, OUTPUT);
-  pinMode(u32Motor2, OUTPUT);
+  pinMode(u16PinMotor1, OUTPUT);
+  pinMode(u16PinMotor2, OUTPUT);
   // Set PWM to 12 bits for motor 1, range is 0-4095
-  ledcSetup(s32Channel1,1000,12);
-  ledcAttachPin(u32Motor1,s32Channel1);
+  ledcSetup(u16Channel1,1000,12);     // PWM frequenz is 1000 Hz ? to verify
+  ledcAttachPin(u16PinMotor1,u16Channel1);
   // Set PWM for motor2
-  ledcSetup(s32Channel2,1000,12);
-  ledcAttachPin(u32Motor2,s32Channel2);
+  ledcSetup(u16Channel2,1000,12);
+  ledcAttachPin(u16PinMotor2,u16Channel2);
 }
 
 void loop() 
 {
-  // Take the Joystick value from onWsEvent and change the range from 0-200 to 0-4095
-  //int32_t s32MotorSpeed = 20*u32JoystickValue;
-  int32_t s32MotorSpeed = 1000;
-  //Control the speed of the motor1 and motor2
-  //vDriveThe2Motor(constrain(s32MotorSpeed,0,4096),constrain(s32MotorSpeed,0,4096));  
-  // test function
-  vTestSequenceToMeasure();
+  // *****When 1 cursor value is giving******
+  // Take the Joystick value from onWsEvent and change the range from 0-200 to 0-4200.
+  //int16_t s16MotorSpeed = 21*u16JoystickValue; 
+
+  // *****When 2 cursor value are giving*****
+  // see Trinatronics_Bericht.pdf Abbildung 5 to understand command fonction
+  // giving value between 0-255 for power and between 256-511 for direction
+  if (u16JoystickValue < 256)
+  {
+    u16MotorSpeed1 = u16JoystickValue;
+    u16MotorSpeed2 = u16JoystickValue;
+  }
+  // when the direction change
+  if (u16JoystickValue >= 256)
+  {
+    if (u16JoystickValue <= 383)      // range of 256-383 decrease speed of motor 1 
+    {
+      // calcul the difference of speed, see fonction setting in Trinatronics_Bericht.docx
+      u16MotorSpeed1 = (uint16_t)u16JoystickValue*2047/127 + 2048 - (uint16_t)256*2047/127;
+    }
+    else if(u16JoystickValue > 383)   // range of 384-512 decrease speed of motor 2
+    {
+      u16MotorSpeed2 = (uint16_t)u16JoystickValue*(-2047/129) + 4095 - (uint16_t)383*(-2047/129);
+    }
+  }
+  //Control the speed of the motor1 and motor2. Use constrain because 21*200 > 4066
+  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));  
+
+  //uncomment if you want to use test function
+  //vTestSequenceToMeasure();
 }
 
 /**
-* @param u32spdm1
-* @param u32spdM2
+* @param u16spdM1
+* @param u16spdM2
 * @brief set PWM signal to control motor1 and motor2 speed
 *        0 is no speed and 4095 is max speed
 **/
-void vDriveThe2Motor(uint32_t u32spdM1, uint32_t u32spdM2) 
+void vDriveThe2Motor(uint32_t u16spdM1, uint32_t u16spdM2) 
 {
   // set Pull-down
-  digitalWrite(u32Motor1, LOW);   
-  digitalWrite(u32Motor2, LOW);       
+  digitalWrite(u16PinMotor1, LOW);   
+  digitalWrite(u16PinMotor2, LOW);       
   // Control motor rotation speed, PWM signal
-  ledcWrite(s32Channel1, u32spdM1);
-  ledcWrite(s32Channel2, u32spdM2);
+  ledcWrite(u16Channel1, u16spdM1);
+  ledcWrite(u16Channel2, u16spdM2);
 }
 
+// test fonction to make measure of 1 Motor, add every 3s the value 500 to PWM
 // excel data to see result of speed, current and voltage measure
 void vTestSequenceToMeasure (void)
 {
   uint32_t u32spd = 0;
-  digitalWrite(u32Motor1, LOW);        //Low = pole - of motor
-  //digitalWrite(u32Motor2, LOW);    
-  // Motor 2 at speed 0
-  //ledcWrite(s32Channel2, 0);
-  ledcWrite(s32Channel1, u32spd);
+  digitalWrite(u16PinMotor1, LOW);        //Pull-down output
+ 
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = u32spd + 500;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
   u32spd = 4096;
-  ledcWrite(s32Channel1, u32spd);
+  ledcWrite(u16Channel1, u32spd);
   delay(3000);
 }
 
@@ -121,11 +146,11 @@ void vTestSequenceToMeasure (void)
 * @param client
 * @param type
 * @param arg
-* @param data
-* @param len
+* @param data, transmitting array of char
+* @param len, length of the array
 * @brief communicate per Wifi with Websockets protocole. 
 *         take the transmitted char data to int value 
-*         and save it in globale variable u32JoystickValue
+*         and save it in globale variable u16JoystickValue
 **/
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) 
 {
@@ -141,7 +166,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         case WS_EVT_DATA:
             // Conversion des données en int et mise à jour de la variable globale
             data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
-            u32JoystickValue = atoi((char*)data);  // Convertit les données en integer
+            u16JoystickValue = atoi((char*)data);  // Convertit les données en integer
             // Renvoyer les données au client pour confirmation
             break;
     }
