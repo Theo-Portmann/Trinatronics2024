@@ -23,8 +23,8 @@ AsyncWebSocket ws("/ws");
 // Pin definition 
 uint16_t u16PinMotor1 = 2;         // Define the pin to commande motor 1, at left
 uint16_t u16PinMotor2 = 4;         // Define the pin to commande motor 2, at right
-int16_t s16Channel1 = 0;         // PWM-channel for motor 1
-int16_t s16Channel2 = 0;         // PWM channel for motor 2
+int16_t u16Channel1 = 0;         // PWM-channel for motor 1
+int16_t u16Channel2 = 0;         // PWM channel for motor 2
 
 // Define of globale varibale
 uint16_t u16JoystickValue = 0;    // take the websocket give-value
