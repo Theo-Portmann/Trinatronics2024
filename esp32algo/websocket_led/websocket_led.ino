@@ -28,6 +28,7 @@
               Serial.println("Client deconnecté");
               break;
           case WS_EVT_DATA:
+              Serial.write(data,len);
               if (strcmp((char*)data, "ping") == 0) {
                   client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
               } else {

@@ -5,13 +5,13 @@ import asyncio
 import time
 
 
-
 class JoystickApp:
     def __init__(self, master):
+        self.position_0=100
 
         manette=False
-        self.x = 100
-        self.y = 100
+        self.x = self.position_0
+        self.y = self.position_0
         self.master = master
         master.title("Joystick Example")
 
@@ -20,7 +20,7 @@ class JoystickApp:
         # Configuration du joystick horizontal
         self.horizontal_joystick = tk.Canvas(master, width=200, height=100, bg='lightgray')
         self.horizontal_joystick.grid(row=0, column=0)
-        self.horizontal_handle = self.horizontal_joystick.create_oval(90, 40, 110, 60, outline='black', fill='yellow', width=2)
+        self.horizontal_handle = self.horizontal_joystick.create_oval(self.position_0-10, 40, self.position_0+10, 60, outline='black', fill='yellow', width=2)
 
 
         # Configuration du joystick vertical
@@ -86,11 +86,13 @@ class JoystickApp:
 
     def reset_horizontal(self, event):
         self.horizontal_joystick.coords(self.horizontal_handle, 90, 40, 110, 60)
-        self.x = 100
+        self.x = self.position_0
 
     def reset_vertical(self, event):
+
+        #adapter le reset pour le joystick vertical en fonction de self.position_0si 0, mettre le joystick tout en haut
         self.vertical_joystick.coords(self.vertical_handle, 40, 90, 60, 110)
-        self.y = 100
+        self.y = self.position_0
 
     def listen_to_controller(self):
         """Listens to controller events and updates positions."""
