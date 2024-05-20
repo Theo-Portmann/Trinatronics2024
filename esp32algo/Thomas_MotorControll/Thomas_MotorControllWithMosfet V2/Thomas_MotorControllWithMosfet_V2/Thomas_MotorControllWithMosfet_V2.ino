@@ -4,12 +4,10 @@
   Auther      : Thomas Eyer, Johan Maring
   Création    : 04/02/2024
   Modification: V1 06/05/2024 
+                V2 20/05/2024
             
   Description : Crée un serveur websocket sur l'ESP32, et commande 
-                un moteur par l'intermédiare d'un mosfet. Implémentation 
-                pour commande du deuxième moteur déjà commencer, mais 
-                reste encore à décommenter certaine partie pour faire 
-                fonctionner avec 2 moteur.
+                2 moteurs par l'intermédiare de mosfets. 
 **********************************************************************/
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -49,7 +47,7 @@ void setup()
   pinMode(u16PinMotor1, OUTPUT);
   pinMode(u16PinMotor2, OUTPUT);
   // Set PWM to 12 bits for motor 1, range is 0-4095
-  ledcSetup(u16Channel1,1000,12);     // PWM frequenz is 1000 Hz ? to verify
+  ledcSetup(u16Channel1,1000,12);     // PWM frequenz of 10000 Hz, see 
   ledcAttachPin(u16PinMotor1,u16Channel1);
   // Set PWM for motor2
   ledcSetup(u16Channel2,1000,12);
@@ -65,29 +63,29 @@ void loop()
   // *****When 2 cursor value are giving*****
   // see Trinatronics_Bericht.pdf Abbildung 5 to understand command fonction
   // giving value between 0-255 for power and between 256-511 for direction
-  if (u16JoystickValue < 256)
-  {
-    u16MotorSpeed1 = u16JoystickValue;
-    u16MotorSpeed2 = u16JoystickValue;
-  }
-  // when the direction change
-  if (u16JoystickValue >= 256)
-  {
-    if (u16JoystickValue <= 383)      // range of 256-383 decrease speed of motor 1 
-    {
-      // calcul the difference of speed, see fonction setting in Trinatronics_Bericht.docx
-      u16MotorSpeed1 = (uint16_t)u16JoystickValue*2047/127 + 2048 - (uint16_t)256*2047/127;
-    }
-    else if(u16JoystickValue > 383)   // range of 384-512 decrease speed of motor 2
-    {
-      u16MotorSpeed2 = (uint16_t)u16JoystickValue*(-2047/129) + 4095 - (uint16_t)383*(-2047/129);
-    }
-  }
-  //Control the speed of the motor1 and motor2. Use constrain because 21*200 > 4066
-  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));  
+  // if (u16JoystickValue < 256)
+  // {
+  //   u16MotorSpeed1 = u16JoystickValue;
+  //   u16MotorSpeed2 = u16JoystickValue;
+  // }
+  // // when the direction change
+  // if (u16JoystickValue >= 256)
+  // {
+  //   if (u16JoystickValue <= 383)      // range of 256-383 decrease speed of motor 1 
+  //   {
+  //     // calcul the difference of speed, see fonction setting in Trinatronics_Bericht.docx
+  //     u16MotorSpeed1 = (uint16_t)u16JoystickValue*2047/127 + 2048 - (uint16_t)256*2047/127;
+  //   }
+  //   else if(u16JoystickValue > 383)   // range of 384-512 decrease speed of motor 2
+  //   {
+  //     u16MotorSpeed2 = (uint16_t)u16JoystickValue*(-2047/129) + 4095 - (uint16_t)383*(-2047/129);
+  //   }
+  // }
+  // //Control the speed of the motor1 and motor2. Use constrain because 21*200 > 4066
+  // vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));  
 
   //uncomment if you want to use test function
-  //vTestSequenceToMeasure();
+  vTestSequenceToMeasure();
 }
 
 /**
@@ -110,35 +108,44 @@ void vDriveThe2Motor(uint32_t u16spdM1, uint32_t u16spdM2)
 // excel data to see result of speed, current and voltage measure
 void vTestSequenceToMeasure (void)
 {
-  uint32_t u32spd = 0;
-  digitalWrite(u16PinMotor1, LOW);        //Pull-down output
- 
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = u32spd + 500;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
-  u32spd = 4096;
-  ledcWrite(u16Channel1, u32spd);
-  delay(3000);
+  uint32_t u32spd = 3500;
+  //digitalWrite(u16PinMotor1, LOW);        // Configure logic level of GPIO
+  //digitalWrite(u16PinMotor2, LOW);
+  ledcWrite(u16Channel1, u32spd);         // Set the PWM signal 
+  ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = u32spd + 500;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
+  // u32spd = 4096;
+  // ledcWrite(u16Channel1, u32spd);
+  // ledcWrite(u16Channel2, u32spd);
+  // delay(3000);
 }
 
 /**
