@@ -29,7 +29,8 @@ void setup(void)
   Serial.println("Adafruit BNO08x test!");
 
   // Try to initialize!
-  if (!bno08x.begin_UART(&Serial1))  // Requires a device with > 300 byte
+  if (!bno08x.begin_I2C())
+  //if (!bno08x.begin_UART(&Serial1))  // Requires a device with > 300 byte
   //if (!bno08x.begin_SPI(BNO08X_CS, BNO08X_INT)) 
   {
     Serial.println("Failed to find BNO08x chip");
