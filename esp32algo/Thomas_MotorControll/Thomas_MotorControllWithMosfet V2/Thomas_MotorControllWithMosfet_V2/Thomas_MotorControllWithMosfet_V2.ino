@@ -58,11 +58,11 @@ void loop()
 {
   // *****When 1 cursor value is giving******
   // Take the Joystick value from onWsEvent and change the range from 0-200 to 0-4200.
-  //int16_t s16MotorSpeed = 21*u16JoystickValue; 
+  uint16_t u16MotorSpeed = 21*u16JoystickValue; 
 
-  // *****When 2 cursor value are giving*****
-  // see Trinatronics_Bericht.pdf Abbildung 5 to understand command fonction
-  // giving value between 0-255 for power and between 256-511 for direction
+  // // *****When 2 cursor value are giving*****
+  // // see Trinatronics_Bericht.pdf Abbildung 5 to understand command fonction
+  // // giving value between 0-255 for power and between 256-511 for direction
   // if (u16JoystickValue < 256)
   // {
   //   u16MotorSpeed1 = u16JoystickValue;
@@ -82,10 +82,10 @@ void loop()
   //   }
   // }
   // //Control the speed of the motor1 and motor2. Use constrain because 21*200 > 4066
-  // vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));  
+  vDriveThe2Motor(constrain(u16MotorSpeed,0,4096),constrain(u16MotorSpeed,0,4096));  
 
   //uncomment if you want to use test function
-  vTestSequenceToMeasure();
+  //vTestSequenceToMeasure();
 }
 
 /**
