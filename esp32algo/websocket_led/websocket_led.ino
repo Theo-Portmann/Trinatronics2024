@@ -18,27 +18,36 @@
   AsyncWebServer server(80);
   AsyncWebSocket ws("/ws");
 
-  void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-      switch (type) {
-          case WS_EVT_CONNECT:
-              Serial.println("Client connecté");
-              server->cleanupClients(1);  // Gardez 1 client, le nouveau
-              break;
-          case WS_EVT_DISCONNECT:
-              Serial.println("Client deconnecté");
-              break;
-          case WS_EVT_DATA:
-              Serial.write(data,len);
-              Serial.println("");
-              if (strcmp((char*)data, "ping") == 0) {
-                  client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
-              } else {
-                  data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
-                  ledValue = atoi((char*)data);  // Convertit les données en integer
-              }
-              break;
+ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) 
+{
+  switch (type) 
+  {
+    case WS_EVT_CONNECT:
+      Serial.println("Client connecté");
+      server->cleanupClients(1); // Keep 1 client, the new one
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.println("Client déconnecté");
+      break;
+    case WS_EVT_DATA:
+      Serial.write(data,len);
+      Serial.println("");
+      if (strcmp((char*)data, "ping") == 0) 
+      {
+        client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
+      } 
+      else if (strcmp((char*)data, "end")== 0)
+      {
+        ledValue = 0;
       }
+      else
+      {
+        data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
+        ledValue = atoi((char*)data);  // Convertit les données en integer
+      }
+      break;
   }
+}
 
   void setup() {
       Serial.begin(115200);
