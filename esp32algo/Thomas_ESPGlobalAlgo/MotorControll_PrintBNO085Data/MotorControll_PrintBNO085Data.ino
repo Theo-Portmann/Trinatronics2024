@@ -5,7 +5,8 @@
                 using WebSocket on ESP32 C3 SuperMini.
   Author      : Thomas Eyer
   Creation    : 24/05/2024
-  Modification:  
+  Modification:  27/05/2024 (amélioration du Websockets: ping pong)
+
 ***********************************************************************/
 
 #include <WiFi.h>
@@ -81,7 +82,7 @@ void setup()
   // Call onWsEvent function (see at the end of file = "EOF")
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
-  server.begin();  
+  server.begin();
   // ----------------- Initialize motor controll --------------------------------
   // Pin initialization for motor
   pinMode(u16PinMotor1, OUTPUT);
@@ -212,10 +213,20 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       Serial.println("Client déconnecté");
       break;
     case WS_EVT_DATA:
-      // Conversion des données en int et mise à jour de la variable globale
-      data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
-      u16JoystickValue = atoi((char*)data); // Convertit les données en integer
-      // Renvoyer les données au client pour confirmation
+      Serial.write(data,len);
+      Serial.println("");
+      if (strcmp((char*)data, "ping") == 0) 
+      {
+        client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
+      } else 
+      {
+        data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
+        u16JoystickValue = atoi((char*)data);  // Convertit les données en integer
+      }
+      // // Conversion des données en int et mise à jour de la variable globale
+      // data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
+      // u16JoystickValue = atoi((char*)data); // Convertit les données en integer
+      // // Renvoyer les données au client pour confirmation
       break;
   }
 }
