@@ -1,5 +1,6 @@
   #include <WiFi.h>
   #include <ESPAsyncWebServer.h>
+  #include "esp_wifi.h"
 
   //code qui cree un serveur websocket sur l'ESP32 
   //modifie letat de la LED en fonction de la variable globale ledValue
@@ -28,8 +29,8 @@
               Serial.println("Client deconnecté");
               break;
           case WS_EVT_DATA:
-              Serial.write(data,len);
-              Serial.println("");
+              //Serial.write(data,len);
+              //Serial.println("");
               if (strcmp((char*)data, "ping") == 0) {
                   client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
               } else {
@@ -44,6 +45,7 @@
       Serial.begin(115200);
       WiFi.softAP(ssid, password);
       Serial.println("Hotspot WiFi démarré");
+      esp_wifi_set_max_tx_power(78);
 
       Serial.print("IP Address: ");
       Serial.println(WiFi.softAPIP());
