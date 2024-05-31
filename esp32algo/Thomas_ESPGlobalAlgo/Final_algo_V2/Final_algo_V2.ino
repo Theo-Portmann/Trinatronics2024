@@ -1,25 +1,36 @@
-/**************************************************************************************
-  Filename    : Final_Algo.ino
+/**********************************************************************************
+  Filename    : Final_Algo_V2.ino
   Description : Use I2C to get orientation data from BNO085 and calculate 
                 aircraft inclination in degrees, and separated control motor speed 
                 using WebSocket on ESP32 C3 SuperMini.
-  Good to know: If BNO085 not found, programm will not run    
+
+  Good to know: To see serial monitor print, set DEBUG to 1
+                ERREUR: ledcAttachPin et ledcSetup non reconnu ???
   Author      : Thomas Eyer, Johan Maring
-  Creation    : 24/05/2024
+  Creation    :  24/05/2024
   Modification:  27/05/2024: amélioration du Websockets, ajout ping pong
                  27/05/2024: implémentation code, controle moteur avec donée capteur
-                 31/05/2024: correction d'erreur si aucune donnée n'est transmise
-****************************************************************************************/
+                 31/05/2024: ajout de #define DEBUG 
+*********************************************************************************/
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <Wire.h>
 #include <Adafruit_BNO08x.h>
-#define CONTROLL_PER_APP 1          // change to enabled/disabled controll motor with sensor
-#if CONTROLL_PER_APP
-   #define CONTROLL_WITH_BNO085 0
+
+#define DEBUG 1                     // set 1 to see debug print at serial monitor
+#define CONTROLL_PER_APP 1          // set 1 to controll motor with app, 0 with sensor
+#if CONTROLL_PER_APP                // do not touch       
+   #define CONTROLL_WITH_BNO085 0   // do not touch   
 #else 
-  #define CONTROLL_WITH_BNO085 1
+  #define CONTROLL_WITH_BNO085 1    // do not touch   
 #endif
+
+#if CONTROLL_WITH_BNO085
+// RST not use for I2C, so take -1 : notavalue
+#define BNO08X_RESET -1
+Adafruit_BNO08x bno08x(BNO08X_RESET);
+sh2_SensorValue_t sensorValue;
+#endif // CONTROLL_WITH_BNO085
 
 // Set wifi communication access 
 const char* ssid = "ESP32-Access-Point1";
@@ -34,39 +45,48 @@ int16_t u16Channel1 = 0; // PWM-channel for motor 1
 int16_t u16Channel2 = 0; // PWM channel for motor 2
 
 // Define of global variable
-uint16_t u16JoystickValue = 0;    // Take the websocket give-value
+uint16_t volatile u16JoystickValue = 0;    // Take the websocket give-value
 uint16_t u16SpeedGlobal = 0;      // Speed of right-joystick for both motor
 int16_t s16SpeedDifference = 0;  // based on left-joystick, change individual motor speed
 uint16_t u16MotorSpeed1 = 0;      // Speed variable of motor 1
 uint16_t u16MotorSpeed2 = 0;      // Speed variable of motor 2
 
-#if CONTROLL_WITH_BNO085
-// RST not use for I2C, so take -1 : notavalue
-#define BNO08X_RESET -1
-Adafruit_BNO08x bno08x(BNO08X_RESET);
-sh2_SensorValue_t sensorValue;
-#endif // BNO08X_RESET
-
+// ********************************* SETUP **************************************
 void setup() 
 {
+  //------------------ Initializatin of Serial Monitor --------------------------
+  #if DEBUG   // Debug output to serial monitor
   Serial.begin(115200);
   while (!Serial)
   {
     delay(10); // Will pause ESP until serial console opens
   }
   Serial.println("Trinatronics 2024 test!");
-
-
-  //-------------------- Initialize I2C communication------------------------
+  #endif     //DEBUG
+  //------------------ Initialize wifi server and the WebSocket protocol---------
+  WiFi.softAP(ssid, password);
+  // Call onWsEvent function (see at the end of file = "EOF")
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+  server.begin();
+  #if DEBUG   // Debug output to serial monitor
+  Serial.println("Hotspot WiFi démarré");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.softAPIP());
+  #endif    // DEBUG
+  //------------------ Initialize I2C communication ------------------------
   #if CONTROLL_WITH_BNO085
   if (!bno08x.begin_I2C()) 
   {
+    #if DEBUG // Debug output to serial monitor
     Serial.println("Failed to find BNO085 chip");
+    #endif  // DEBUG
     while (1) 
     {
       delay(10);
     }
   }
+  #if DEBUG // Debug output to serial monitor
   Serial.println("BNO085 Found!");
   for (int n = 0; n < bno08x.prodIds.numEntries; n++) 
   {
@@ -82,35 +102,26 @@ void setup()
     Serial.println(bno08x.prodIds.entry[n].swBuildNumber);
   }
   setReports();
+  #endif    // DEBUG
   #endif // CONTROLL_WITH_BNO085
-
-  //------------------ Initialize wifi server and the WebSocket protocol---------
-  WiFi.softAP(ssid, password);
-  // Debug output to serial monitor
-  Serial.println("Hotspot WiFi démarré");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.softAPIP());
-  // Call onWsEvent function (see at the end of file = "EOF")
-  ws.onEvent(onWsEvent);
-  server.addHandler(&ws);
-  server.begin();
-  // ----------------- Initialize motor controll --------------------------------
+  //------------------ Initialize motor controll --------------------------
   // Pin initialization for motor
   pinMode(u16PinMotor1, OUTPUT);
   pinMode(u16PinMotor2, OUTPUT);
-  // Set PWM to 12 bits for motor 1, range is 0-4095
+  // Set PWM to 12 bits for motors, range is 0-4095
   ledcSetup(u16Channel1, 1000, 12); // PWM frequency of 1000 Hz
   ledcAttachPin(u16PinMotor1, u16Channel1);
-  // Set PWM for motor 2
   ledcSetup(u16Channel2, 1000, 12);
   ledcAttachPin(u16PinMotor2, u16Channel2);
-
+  #if DEBUG // Debug output to serial monitor
   Serial.println("Setup complete, reading events and controlling motors");
+  #endif // DEBUG
 }
 
+// ************************************* LOOP ***************************************
 void loop() 
 {
-  // ----------------------- take BNO085 data --------------------------
+  //------------------ take BNO085 data ----------------------------------
   #if CONTROLL_WITH_BNO085
   delay(10);   
   if (bno08x.wasReset()) 
@@ -128,10 +139,11 @@ void loop()
     float qx = sensorValue.un.rotationVector.i;
     float qy = sensorValue.un.rotationVector.j;
     float qz = sensorValue.un.rotationVector.k;
-    float roll  = atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy)) * 180.0 / PI;
+    float roll  = atan2(2.0 * (qw * qx + qy * qz), 
+                1.0 - 2.0 * (qx * qx + qy * qy)) * 180.0 / PI;
     float pitch = asin(2.0 * (qw * qy - qz * qx)) * 180.0 / PI;
-    float yaw   = atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
-
+    float yaw   = atan2(2.0 * (qw * qz + qx * qy), 
+                1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
     // uncomment if you want to print BNO085 data
     // Serial.print("Roll: ");
     // Serial.print(roll);
@@ -139,7 +151,7 @@ void loop()
     // Serial.print(pitch);
     // Serial.print(" Yaw: ");
     // Serial.println(yaw);
-    // ------------------- controll motor with BNO085 -------------------------------
+    //------------------ controll motor with BNO085 -------------------------------
     u16MotorSpeed = 3500;
     if (pitch > 20.0)
     {
@@ -153,22 +165,17 @@ void loop()
     {
       u16MotorSpeed = (uint16_t) (818*pitch);
     }
-    //Control the speed of the motor1 and motor2. Use constrain to security
+    //Control the speed of the motors. Use constrain to security
     vDriveThe2Motor(constrain(u16MotorSpeed,0,4096),constrain(u16MotorSpeed,0,4096)); 
   }
   #endif // CONTROLL_WITH_BNO085
 
   #if CONTROLL_PER_APP
-  // -------------------------- controll motor with Websockets -------------------------------
-  // *****When 1 cursor value is giving******
-  // Take the Joystick value from onWsEvent and change the range from 0-200 to 0-4200.
-  // uint16_t u16MotorSpeed = 21*u16JoystickValue; 
-
-  // *****When 2 cursor value are giving*****
   // giving value between 0-255 for direction and between 256-511 for power
-  // Print motor speeds to Serial Monitor
+  #if DEBUG  // Debug output to serial monitor
   Serial.print(" u16Joystickvalue: ");
   Serial.println(u16JoystickValue);
+  #endif    // DEBUG
   if (u16JoystickValue >= 256)
   {
     u16SpeedGlobal = (u16JoystickValue - 256)*16;
@@ -176,7 +183,7 @@ void loop()
     u16MotorSpeed2 = u16SpeedGlobal;
   }
   // when the direction change
-  else if (u16JoystickValue < 256)
+  if (u16JoystickValue < 256)
   {
     s16SpeedDifference = -(uint16_t)(2*4096/256) + 4096;
     if (s16SpeedDifference > 0)
@@ -190,14 +197,12 @@ void loop()
       u16MotorSpeed2 = u16SpeedGlobal - abs(s16SpeedDifference);
     }
   }
-  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));
-  delay(1000);   
-  #endif
-  //uncomment if you want to use test function
-  //vTestSequenceToMeasure(); 
+  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),
+                    constrain(u16MotorSpeed2,0,4096));
+  #endif // CONTROLL_PER_APP
 }
 
-// ------------------------------------ function definition -----------------------------
+// ******************************* function definition ******************************
 /**
 * @brief Set PWM signal to control motor1 and motor2 speed
 *        0 is no speed and 4095 is max speed
