@@ -33,7 +33,7 @@ int16_t u16Channel1 = 0; // PWM-channel for motor 1
 int16_t u16Channel2 = 0; // PWM channel for motor 2
 
 // Define of global variable
-uint16_t u16JoystickValue = 0;    // Take the websocket give-value
+uint16_t volatile u16JoystickValue = 0;    // Take the websocket give-value
 uint16_t u16SpeedGlobal = 0;      // Speed of right-joystick for both motor
 int16_t s16SpeedDifference = 0;  // based on left-joystick, change individual motor speed
 uint16_t u16MotorSpeed1 = 0;      // Speed variable of motor 1
@@ -165,6 +165,9 @@ void loop()
 
   // *****When 2 cursor value are giving*****
   // giving value between 0-255 for direction and between 256-511 for power
+  // Print motor speeds to Serial Monitor
+  Serial.print(" u16Joystickvalue: ");
+  Serial.println(u16JoystickValue);
   if (u16JoystickValue >= 256)
   {
     u16SpeedGlobal = (u16JoystickValue - 256)*16;
@@ -186,8 +189,9 @@ void loop()
       u16MotorSpeed2 = u16SpeedGlobal - abs(s16SpeedDifference);
     }
   }
-  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));   
-
+  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));
+  delay(1000);   
+  #endif
   //uncomment if you want to use test function
   //vTestSequenceToMeasure(); 
 }
@@ -207,11 +211,18 @@ void vDriveThe2Motor(uint32_t u16spdM1, uint32_t u16spdM2)
   // Control motor rotation speed, PWM signal
   ledcWrite(u16Channel1, u16spdM1);
   ledcWrite(u16Channel2, u16spdM2);
+
+   // Print motor speeds to Serial Monitor
+  Serial.print("Motor 1 speed: ");
+  Serial.println(u16spdM1);
+  Serial.print(" Motor 2 speed: ");
+  Serial.println(u16spdM2);
 }
 
 /**
 * @brief Here you define the sensor outputs you want to receive
 **/
+#if CONTROLL_WITH_BNO085 
 void setReports() 
 {
   Serial.println("Setting desired reports");
@@ -220,6 +231,7 @@ void setReports()
     Serial.println("Could not enable rotation vector");
   }
 }
+#endif // CONTROLL_WITH_BNO085
 
 /**
 * @brief Communicate per Wifi with Websockets protocol. 
@@ -244,16 +256,28 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       Serial.println("Client déconnecté");
       break;
     case WS_EVT_DATA:
+
+
+      if (!len)
+      {
+        break;
+      }
+
+
+      Serial.println();
+
       Serial.write(data,len);
-      Serial.println("");
+      Serial.println("\n");
+
       if (strcmp((char*)data, "ping") == 0) 
       {
         client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
+        
       } 
       else if (strcmp((char*)data, "end")== 0)
-      {
-        u16JoystickValue = 0;
-      }
+       {
+         u16JoystickValue = 0;
+       }
       else
       {
         data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
