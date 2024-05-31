@@ -1,14 +1,14 @@
 /**********************************************************************
-  Filename    : MotorControll_PrintBNO085Data.ino
+  Filename    : MotorControll_PrintBNO085Data_V2.ino
   Description : Use I2C to get orientation data from BNO085 and calculate 
                 aircraft inclination in degrees, and separated control motor speed 
                 using WebSocket on ESP32 C3 SuperMini.
+  Good to know: If BNO085 not found, programm will not run    
   Author      : Thomas Eyer
   Creation    : 24/05/2024
-  Modification:  27/05/2024 (amélioration du Websockets: ping pong)
-
+  Modification:  27/05/2024: amélioration du Websockets, ajout ping pong
+                 27/05/2024: implémentation code, controle moteur avec donée capteur
 ***********************************************************************/
-
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <Wire.h>
@@ -27,9 +27,11 @@ int16_t u16Channel1 = 0; // PWM-channel for motor 1
 int16_t u16Channel2 = 0; // PWM channel for motor 2
 
 // Define of global variable
-uint16_t u16JoystickValue = 0; // Take the websocket give-value
-uint16_t u16MotorSpeed1 = 0; // Speed variable of motor 1
-uint16_t u16MotorSpeed2 = 0; // Speed variable of motor 2
+uint16_t u16JoystickValue = 0;    // Take the websocket give-value
+uint16_t u16SpeedGlobal = 0;      // Speed of right-joystick for both motor
+int16_t s16SpeedDifference = 0;  // based on left-joystick, change individual motor speed
+uint16_t u16MotorSpeed1 = 0;      // Speed variable of motor 1
+uint16_t u16MotorSpeed2 = 0;      // Speed variable of motor 2
 
 // RST not use for I2C, so take -1 : notavalue
 #define BNO08X_RESET -1
@@ -117,46 +119,65 @@ void loop()
     float qy = sensorValue.un.rotationVector.j;
     float qz = sensorValue.un.rotationVector.k;
 
+
     float roll  = atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy)) * 180.0 / PI;
     float pitch = asin(2.0 * (qw * qy - qz * qx)) * 180.0 / PI;
     float yaw   = atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
 
-    Serial.print("Roll: ");
-    Serial.print(roll);
-    Serial.print(" Pitch: ");
-    Serial.print(pitch);
-    Serial.print(" Yaw: ");
-    Serial.println(yaw);
+    // Serial.print("Roll: ");
+    // Serial.print(roll);
+    // Serial.print(" Pitch: ");
+    // Serial.print(pitch);
+    // Serial.print(" Yaw: ");
+    // Serial.println(yaw);
   }
   
-  // -------------------------- take transmitted Websockets value --------------------------
-  // -------------------------- and controll the motor speed -------------------------------
+  // -------------------------- controll motor with Websockets -------------------------------
   // *****When 1 cursor value is giving******
   // Take the Joystick value from onWsEvent and change the range from 0-200 to 0-4200.
-  uint16_t u16MotorSpeed = 21*u16JoystickValue; 
+  // uint16_t u16MotorSpeed = 21*u16JoystickValue; 
 
-  // // *****When 2 cursor value are giving*****
-  // // see Trinatronics_Bericht.pdf Abbildung 5 to understand command fonction
-  // // giving value between 0-255 for power and between 256-511 for direction
-  // if (u16JoystickValue < 256)
-  // {
-  //   u16MotorSpeed1 = u16JoystickValue;
-  //   u16MotorSpeed2 = u16JoystickValue;
-  // }
-  // // when the direction change
-  // if (u16JoystickValue >= 256)
-  // {
-  //   if (u16JoystickValue <= 383)      // range of 256-383 decrease speed of motor 1 
-  //   {
-  //     // calcul the difference of speed, see fonction setting in Trinatronics_Bericht.docx
-  //     u16MotorSpeed1 = (uint16_t)u16JoystickValue*2047/127 + 2048 - (uint16_t)256*2047/127;
-  //   }
-  //   else if(u16JoystickValue > 383)   // range of 384-512 decrease speed of motor 2
-  //   {
-  //     u16MotorSpeed2 = (uint16_t)u16JoystickValue*(-2047/129) + 4095 - (uint16_t)383*(-2047/129);
-  //   }
-  // }
-  // //Control the speed of the motor1 and motor2. Use constrain because 21*200 > 4066
+  // *****When 2 cursor value are giving*****
+  // see Trinatronics_Bericht.pdf Abbildung 5 to understand command fonction
+  // giving value between 0-255 for direction and between 256-511 for power
+  if (u16JoystickValue >= 256)
+  {
+    u16SpeedGlobal = (u16JoystickValue - 256)*16;
+    u16MotorSpeed1 = u16SpeedGlobal;
+    u16MotorSpeed2 = u16SpeedGlobal;
+  }
+  // when the direction change
+  else if (u16JoystickValue < 256)
+  {
+    s16SpeedDifference = -(uint16_t)(2*4096/256) + 4096;
+    if (s16SpeedDifference > 0)
+    {
+      u16MotorSpeed1 = u16SpeedGlobal - abs(s16SpeedDifference);
+      u16MotorSpeed2 = u16SpeedGlobal + abs(s16SpeedDifference);
+    }
+    else
+    {
+      u16MotorSpeed1 = u16SpeedGlobal + abs(s16SpeedDifference);
+      u16MotorSpeed2 = u16SpeedGlobal - abs(s16SpeedDifference);
+    }
+  }
+  //Control the speed of the motor1 and motor2. Use constrain to security
+  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),constrain(u16MotorSpeed2,0,4096));  
+
+  // ------------------- controll motor with BNO085 -------------------------------
+  u16MotorSpeed = 3500;
+  if (pitch > 20.0)
+  {
+    u16MotorSpeed = 0;
+  }
+  if (pitch < 5.0)
+  {
+    u16MotorSpeed = 4095;
+  }
+  else 
+  {
+    u16MotorSpeed = (uint16_t) (818*pitch);
+  }
   vDriveThe2Motor(constrain(u16MotorSpeed,0,4096),constrain(u16MotorSpeed,0,4096));  
 
   //uncomment if you want to use test function
@@ -218,15 +239,16 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       if (strcmp((char*)data, "ping") == 0) 
       {
         client->text("pong"); //Ajout d'une logique ping pong qui permet au client de se reconnecter si le serveur ne repond pas
-      } else 
+      } 
+      else if (strcmp((char*)data, "end")== 0)
+      {
+        u16JoystickValue = 0;
+      }
+      else
       {
         data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
         u16JoystickValue = atoi((char*)data);  // Convertit les données en integer
       }
-      // // Conversion des données en int et mise à jour de la variable globale
-      // data[len] = '\0'; // Assurez-vous que la chaîne est terminée proprement pour conversion
-      // u16JoystickValue = atoi((char*)data); // Convertit les données en integer
-      // // Renvoyer les données au client pour confirmation
       break;
   }
 }
