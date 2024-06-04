@@ -20,17 +20,15 @@
 #define DEBUG 1                     // set 1 to see debug print at serial monitor
 #define CONTROLL_PER_APP 1          // set 1 to controll motor with app, 0 with sensor
 #if CONTROLL_PER_APP                // do not touch       
-   #define CONTROLL_WITH_BNO085 0   // do not touch   
+   #define CONTROL_MODE_AUTO 0   // do not touch   
 #else 
-  #define CONTROLL_WITH_BNO085 1    // do not touch   
+  #define CONTROL_MODE_AUTO 1    // do not touch   
 #endif
 
-#if CONTROLL_WITH_BNO085
 // RST not use for I2C, so take -1 : notavalue
 #define BNO08X_RESET -1
 Adafruit_BNO08x bno08x(BNO08X_RESET);
 sh2_SensorValue_t sensorValue;
-#endif // CONTROLL_WITH_BNO085
 
 // Set wifi communication access 
 const char* ssid = "ESP32-Access-Point1";
@@ -45,11 +43,15 @@ int16_t u16Channel1 = 0; // PWM-channel for motor 1
 int16_t u16Channel2 = 0; // PWM channel for motor 2
 
 // Define of global variable
-uint16_t volatile u16JoystickValue = 0;    // Take the websocket give-value
+uint16_t volatile u16JoystickValue = 512;    // Take the websocket give-value
 uint16_t u16SpeedGlobal = 0;      // Speed of right-joystick for both motor
 int16_t s16SpeedDifference = 0;  // based on left-joystick, change individual motor speed
 uint16_t u16MotorSpeed1 = 0;      // Speed variable of motor 1
 uint16_t u16MotorSpeed2 = 0;      // Speed variable of motor 2
+uint16_t u16MotorSpeed = 0;
+bool bAutoMode = false;           // Auto mode activation
+uint32_t u32TimeIncr = 0;
+double dAlpha = 0.5;            // Alpha coefficient for motor control
 
 // ********************************* SETUP **************************************
 void setup() 
@@ -75,44 +77,49 @@ void setup()
   Serial.println(WiFi.softAPIP());
   #endif    // DEBUG
   //------------------ Initialize I2C communication ------------------------
-  #if CONTROLL_WITH_BNO085
-  if (!bno08x.begin_I2C()) 
+  if (bAutoMode)
   {
-    #if DEBUG // Debug output to serial monitor
-    Serial.println("Failed to find BNO085 chip");
-    #endif  // DEBUG
-    while (1) 
+    if (!bno08x.begin_I2C()) 
     {
-      delay(10);
+      #if DEBUG // Debug output to serial monitor
+      Serial.println("Failed to find BNO085 chip");
+      #endif  // DEBUG
+      while (1) 
+      {
+        delay(10);
+      }
     }
+    #if DEBUG // Debug output to serial monitor
+    Serial.println("BNO085 Found!");
+    for (int n = 0; n < bno08x.prodIds.numEntries; n++) 
+    {
+      Serial.print("Part ");
+      Serial.print(bno08x.prodIds.entry[n].swPartNumber);
+      Serial.print(": Version :");
+      Serial.print(bno08x.prodIds.entry[n].swVersionMajor);
+      Serial.print(".");
+      Serial.print(bno08x.prodIds.entry[n].swVersionMinor);
+      Serial.print(".");
+      Serial.print(bno08x.prodIds.entry[n].swVersionPatch);
+      Serial.print(" Build ");
+      Serial.println(bno08x.prodIds.entry[n].swBuildNumber);
+    }
+    setReports();
+    #endif    // DEBUG
+
+    //------------------ alpha coefficient for motor control ---------------------
   }
-  #if DEBUG // Debug output to serial monitor
-  Serial.println("BNO085 Found!");
-  for (int n = 0; n < bno08x.prodIds.numEntries; n++) 
-  {
-    Serial.print("Part ");
-    Serial.print(bno08x.prodIds.entry[n].swPartNumber);
-    Serial.print(": Version :");
-    Serial.print(bno08x.prodIds.entry[n].swVersionMajor);
-    Serial.print(".");
-    Serial.print(bno08x.prodIds.entry[n].swVersionMinor);
-    Serial.print(".");
-    Serial.print(bno08x.prodIds.entry[n].swVersionPatch);
-    Serial.print(" Build ");
-    Serial.println(bno08x.prodIds.entry[n].swBuildNumber);
-  }
-  setReports();
-  #endif    // DEBUG
-  #endif // CONTROLL_WITH_BNO085
   //------------------ Initialize motor controll --------------------------
   // Pin initialization for motor
   pinMode(u16PinMotor1, OUTPUT);
   pinMode(u16PinMotor2, OUTPUT);
   // Set PWM to 12 bits for motors, range is 0-4095
-  ledcSetup(u16Channel1, 1000, 12); // PWM frequency of 1000 Hz
-  ledcAttachPin(u16PinMotor1, u16Channel1);
-  ledcSetup(u16Channel2, 1000, 12);
-  ledcAttachPin(u16PinMotor2, u16Channel2);
+  ledcAttachChannel(u16PinMotor1, 1000, 12, u16Channel1);
+  // ledcSetup(u16Channel1, 1000, 12); // PWM frequency of 1000 Hz
+  // ledcAttachPin(u16PinMotor1, u16Channel1);
+  ledcAttachChannel(u16PinMotor2, 1000, 12, u16Channel2);
+  // ledcSetup(u16Channel2, 1000, 12);
+  // ledcAttachPin(u16PinMotor2, u16Channel2);
   #if DEBUG // Debug output to serial monitor
   Serial.println("Setup complete, reading events and controlling motors");
   #endif // DEBUG
@@ -122,84 +129,108 @@ void setup()
 void loop() 
 {
   //------------------ take BNO085 data ----------------------------------
-  #if CONTROLL_WITH_BNO085
-  delay(10);   
-  if (bno08x.wasReset()) 
+  if (bAutoMode)
   {
-    Serial.print("Sensor was reset ");
-    setReports();
-  }
-  if (!bno08x.getSensorEvent(&sensorValue)) 
-  {
-    return;
-  }
-  if (sensorValue.sensorId == SH2_ROTATION_VECTOR) 
-  {
-    float qw = sensorValue.un.rotationVector.real;
-    float qx = sensorValue.un.rotationVector.i;
-    float qy = sensorValue.un.rotationVector.j;
-    float qz = sensorValue.un.rotationVector.k;
-    float roll  = atan2(2.0 * (qw * qx + qy * qz), 
-                1.0 - 2.0 * (qx * qx + qy * qy)) * 180.0 / PI;
-    float pitch = asin(2.0 * (qw * qy - qz * qx)) * 180.0 / PI;
-    float yaw   = atan2(2.0 * (qw * qz + qx * qy), 
-                1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
-    // uncomment if you want to print BNO085 data
-    // Serial.print("Roll: ");
-    // Serial.print(roll);
-    // Serial.print(" Pitch: ");
-    // Serial.print(pitch);
-    // Serial.print(" Yaw: ");
-    // Serial.println(yaw);
-    //------------------ controll motor with BNO085 -------------------------------
-    u16MotorSpeed = 3500;
-    if (pitch > 20.0)
+    delay(10);   
+    if (bno08x.wasReset()) 
     {
-      u16MotorSpeed = 0;
+      Serial.print("Sensor was reset ");
+      setReports();
     }
-    if (pitch < 5.0)
+    if (!bno08x.getSensorEvent(&sensorValue)) 
     {
-      u16MotorSpeed = 4095;
+      return;
     }
-    else 
+    if (sensorValue.sensorId == SH2_ROTATION_VECTOR) 
     {
-      u16MotorSpeed = (uint16_t) (818*pitch);
+      float qw = sensorValue.un.rotationVector.real;
+      float qx = sensorValue.un.rotationVector.i;
+      float qy = sensorValue.un.rotationVector.j;
+      float qz = sensorValue.un.rotationVector.k;
+      float roll  = atan2(2.0 * (qw * qx + qy * qz), 
+                  1.0 - 2.0 * (qx * qx + qy * qy)) * 180.0 / PI;
+      float pitch = asin(2.0 * (qw * qy - qz * qx)) * 180.0 / PI;
+      float yaw   = atan2(2.0 * (qw * qz + qx * qy), 
+                  1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
+      // uncomment if you want to print BNO085 data
+      // Serial.print("Roll: ");
+      // Serial.print(roll);
+      // Serial.print(" Pitch: ");
+      // Serial.print(pitch);
+      // Serial.print(" Yaw: ");
+      // Serial.println(yaw);
+      //------------------ controll motor with BNO085 -------------------------------
+      u16MotorSpeed = 3500;
+      if (pitch > 20.0)
+      {
+        u16MotorSpeed = 0;
+      }
+      if (pitch < 5.0)
+      {
+        u16MotorSpeed = 4095;
+      }
+      else 
+      {
+        u16MotorSpeed = (uint16_t) (818*pitch);
+      }
+      //Control the speed of the motors. Use constrain to security
+      vDriveThe2Motor(constrain(u16MotorSpeed,0,4096),
+                        constrain(u16MotorSpeed,0,4096)); 
     }
-    //Control the speed of the motors. Use constrain to security
-    vDriveThe2Motor(constrain(u16MotorSpeed,0,4096),constrain(u16MotorSpeed,0,4096)); 
   }
-  #endif // CONTROLL_WITH_BNO085
 
-  #if CONTROLL_PER_APP
-  // giving value between 0-255 for direction and between 256-511 for power
-  #if DEBUG  // Debug output to serial monitor
-  Serial.print(" u16Joystickvalue: ");
-  Serial.println(u16JoystickValue);
-  #endif    // DEBUG
-  if (u16JoystickValue >= 256)
+  if (!bAutoMode) // if auto mode is not activated, controll motor with app
   {
-    u16SpeedGlobal = (u16JoystickValue - 256)*16;
-    u16MotorSpeed1 = u16SpeedGlobal;
-    u16MotorSpeed2 = u16SpeedGlobal;
-  }
-  // when the direction change
-  if (u16JoystickValue < 256)
-  {
-    s16SpeedDifference = -(uint16_t)(2*4096/256) + 4096;
-    if (s16SpeedDifference > 0)
+    // giving value between 0-255 for direction and between 256-511 for power
+    #if DEBUG  // Debug output to serial monitor
+    if ( u32TimeIncr % 100000 == 0)
     {
-      u16MotorSpeed1 = u16SpeedGlobal - abs(s16SpeedDifference);
-      u16MotorSpeed2 = u16SpeedGlobal + abs(s16SpeedDifference);
+      Serial.print(" u16Joystickvalue: ");
+      Serial.println(u16JoystickValue);
     }
+    #endif    // DEBUG
+    if (u16JoystickValue >= 256)
+    {
+      u16SpeedGlobal = 4095 - static_cast<uint16_t>(u16JoystickValue - 256)*15.9961;
+    }
+    // when the direction change // ERROR JOYSTICK GAUCHE 
     else
     {
-      u16MotorSpeed1 = u16SpeedGlobal + abs(s16SpeedDifference);
-      u16MotorSpeed2 = u16SpeedGlobal - abs(s16SpeedDifference);
+      // Calculate the coefficent alpha for motor control (0.5 when middle of joystick)
+      if (u16JoystickValue == 128)
+      {
+        dAlpha = 0.5 ;
+      }
+      else
+      {
+        dAlpha = static_cast<double>(u16JoystickValue)/255.0;
+      }
     }
+
+
+    // Calculate the speed of the motors based on the alpha coefficient and the global speed
+    if (dAlpha == 0.5)
+    {
+      u16MotorSpeed1 = u16SpeedGlobal;
+      u16MotorSpeed2 = u16SpeedGlobal;
+    }
+    else if (dAlpha < 0.5) // we want to turn left
+    {
+      u16MotorSpeed1 = u16SpeedGlobal; //u16MotorSpeed1 = motor on the right
+      u16MotorSpeed2 = static_cast<uint16_t>(2*u16SpeedGlobal * dAlpha); //u16MotorSpeed2 = motor on the left
+    }
+    else // we want to turn right
+    {
+      u16MotorSpeed1 = static_cast<uint16_t>(2*u16SpeedGlobal - 2*u16SpeedGlobal * dAlpha); //u16MotorSpeed1 = motor on the right
+      u16MotorSpeed2 = u16SpeedGlobal;  //u16MotorSpeed2 = motor on the left
+    }
+
+
+
+    vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),
+                      constrain(u16MotorSpeed2,0,4096));
   }
-  vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),
-                    constrain(u16MotorSpeed2,0,4096));
-  #endif // CONTROLL_PER_APP
+   u32TimeIncr++;
 }
 
 // ******************************* function definition ******************************
@@ -219,16 +250,20 @@ void vDriveThe2Motor(uint32_t u16spdM1, uint32_t u16spdM2)
   ledcWrite(u16Channel2, u16spdM2);
 
    // Print motor speeds to Serial Monitor
-  Serial.print("Motor 1 speed: ");
-  Serial.println(u16spdM1);
-  Serial.print(" Motor 2 speed: ");
-  Serial.println(u16spdM2);
+  #if DEBUG
+  if ( u32TimeIncr % 100000 == 0)
+  {
+    Serial.print("Motor 1 speed: ");
+    Serial.println(u16spdM1);
+    Serial.print(" Motor 2 speed: ");
+    Serial.println(u16spdM2);
+  }
+  #endif // DEBUG
 }
 
 /**
 * @brief Here you define the sensor outputs you want to receive
 **/
-#if CONTROLL_WITH_BNO085 
 void setReports() 
 {
   Serial.println("Setting desired reports");
@@ -237,7 +272,6 @@ void setReports()
     Serial.println("Could not enable rotation vector");
   }
 }
-#endif // CONTROLL_WITH_BNO085
 
 /**
 * @brief Communicate per Wifi with Websockets protocol. 
@@ -270,7 +304,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       Serial.println();
       Serial.write(data,len);
       Serial.println("\n");
-
       if (strcmp((char*)data, "ping") == 0) 
       {
         client->text("pong"); //Ajout d'une logique ping pong qui permet au 
@@ -279,7 +312,12 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       } 
       else if (strcmp((char*)data, "end")== 0)
        {
-         u16JoystickValue = 0;
+         u16JoystickValue = 512;
+       }
+      else if (strcmp((char*)data, "auto")== 0)//activation du mode automatique
+       {
+         client->text("auto");  
+          bAutoMode = true;
        }
       else
       {
