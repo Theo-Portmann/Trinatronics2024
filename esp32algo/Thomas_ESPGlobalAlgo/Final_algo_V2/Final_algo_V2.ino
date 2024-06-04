@@ -17,13 +17,7 @@
 #include <Wire.h>
 #include <Adafruit_BNO08x.h>
 
-#define DEBUG 1                     // set 1 to see debug print at serial monitor
-#define CONTROLL_PER_APP 1          // set 1 to controll motor with app, 0 with sensor
-#if CONTROLL_PER_APP                // do not touch       
-   #define CONTROL_MODE_AUTO 0   // do not touch   
-#else 
-  #define CONTROL_MODE_AUTO 1    // do not touch   
-#endif
+#define DEBUG 1                      // set 1 to see debug print at serial monitor
 
 // RST not use for I2C, so take -1 : notavalue
 #define BNO08X_RESET -1
@@ -106,8 +100,6 @@ void setup()
     }
     setReports();
     #endif    // DEBUG
-
-    //------------------ alpha coefficient for motor control ---------------------
   }
   //------------------ Initialize motor controll --------------------------
   // Pin initialization for motor
@@ -214,15 +206,15 @@ void loop()
       u16MotorSpeed1 = u16SpeedGlobal;
       u16MotorSpeed2 = u16SpeedGlobal;
     }
-    else if (dAlpha < 0.5) // we want to turn left
+    else if (dAlpha < 0.5) // we want to turn right
     {
-      u16MotorSpeed1 = u16SpeedGlobal; //u16MotorSpeed1 = motor on the right
-      u16MotorSpeed2 = static_cast<uint16_t>(2*u16SpeedGlobal * dAlpha); //u16MotorSpeed2 = motor on the left
+      u16MotorSpeed2 = u16SpeedGlobal; //u16MotorSpeed2 = motor on the right
+      u16MotorSpeed1 = static_cast<uint16_t>(2*u16SpeedGlobal * dAlpha); //u16MotorSpeed1 = motor on the left
     }
-    else // we want to turn right
+    else // we want to turn left
     {
-      u16MotorSpeed1 = static_cast<uint16_t>(2*u16SpeedGlobal - 2*u16SpeedGlobal * dAlpha); //u16MotorSpeed1 = motor on the right
-      u16MotorSpeed2 = u16SpeedGlobal;  //u16MotorSpeed2 = motor on the left
+      u16MotorSpeed2 = static_cast<uint16_t>(2*u16SpeedGlobal - 2*u16SpeedGlobal * dAlpha); //u16MotorSpeed2 = motor on the right
+      u16MotorSpeed1 = u16SpeedGlobal;  //u16MotorSpeed1 = motor on the left
     }
 
 
