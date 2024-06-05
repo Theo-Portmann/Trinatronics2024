@@ -18,6 +18,7 @@
 #include <Adafruit_BNO08x.h>
 
 #define DEBUG 1                      // set 1 to see debug print at serial monitor
+#define IS_BNO085_ON_CHIP 0
 
 // RST not use for I2C, so take -1 : notavalue
 #define BNO08X_RESET -1
@@ -70,37 +71,39 @@ void setup()
   Serial.print("IP Address: ");
   Serial.println(WiFi.softAPIP());
   #endif    // DEBUG
+
   //------------------ Initialize I2C communication ------------------------
-  if (bAutoMode)
+ #if IS_BNO085_ON_CHIP
+  if (!bno08x.begin_I2C()) 
   {
-    if (!bno08x.begin_I2C()) 
-    {
-      #if DEBUG // Debug output to serial monitor
-      Serial.println("Failed to find BNO085 chip");
-      #endif  // DEBUG
-      while (1) 
-      {
-        delay(10);
-      }
-    }
     #if DEBUG // Debug output to serial monitor
-    Serial.println("BNO085 Found!");
-    for (int n = 0; n < bno08x.prodIds.numEntries; n++) 
+    Serial.println("Failed to find BNO085 chip");
+    #endif  // DEBUG
+    while (1) 
     {
-      Serial.print("Part ");
-      Serial.print(bno08x.prodIds.entry[n].swPartNumber);
-      Serial.print(": Version :");
-      Serial.print(bno08x.prodIds.entry[n].swVersionMajor);
-      Serial.print(".");
-      Serial.print(bno08x.prodIds.entry[n].swVersionMinor);
-      Serial.print(".");
-      Serial.print(bno08x.prodIds.entry[n].swVersionPatch);
-      Serial.print(" Build ");
-      Serial.println(bno08x.prodIds.entry[n].swBuildNumber);
+
+      delay(10);
     }
-    setReports();
-    #endif    // DEBUG
   }
+  #if DEBUG // Debug output to serial monitor
+  Serial.println("BNO085 Found!");
+  for (int n = 0; n < bno08x.prodIds.numEntries; n++) 
+  {
+    Serial.print("Part ");
+    Serial.print(bno08x.prodIds.entry[n].swPartNumber);
+    Serial.print(": Version :");
+    Serial.print(bno08x.prodIds.entry[n].swVersionMajor);
+    Serial.print(".");
+    Serial.print(bno08x.prodIds.entry[n].swVersionMinor);
+    Serial.print(".");
+    Serial.print(bno08x.prodIds.entry[n].swVersionPatch);
+    Serial.print(" Build ");
+    Serial.println(bno08x.prodIds.entry[n].swBuildNumber);
+  }
+  setReports();
+  #endif    // DEBUG
+  #endif    // IS_BNO085_ON_CHIP
+
   //------------------ Initialize motor controll --------------------------
   // Pin initialization for motor
   pinMode(u16PinMotor1, OUTPUT);
@@ -123,7 +126,14 @@ void loop()
   //------------------ take BNO085 data ----------------------------------
   if (bAutoMode)
   {
-    delay(10);   
+    #if DEBUG
+    if ( u32TimeIncr % 100000 == 0)
+        {
+        Serial.println("Pilotage auto actif");
+        }
+    #endif 
+    #if IS_BNO085_ON_CHIP   
+    delay(10);
     if (bno08x.wasReset()) 
     {
       Serial.print("Sensor was reset ");
@@ -169,9 +179,9 @@ void loop()
       vDriveThe2Motor(constrain(u16MotorSpeed,0,4096),
                         constrain(u16MotorSpeed,0,4096)); 
     }
+    #endif    // IS_BNO085_ON_CHIP
   }
-
-  if (!bAutoMode) // if auto mode is not activated, controll motor with app
+  else// if auto mode is not activated, controll motor with app
   {
     // giving value between 0-255 for direction and between 256-511 for power
     #if DEBUG  // Debug output to serial monitor
@@ -198,8 +208,6 @@ void loop()
         dAlpha = static_cast<double>(u16JoystickValue)/255.0;
       }
     }
-
-
     // Calculate the speed of the motors based on the alpha coefficient and the global speed
     if (dAlpha == 0.5)
     {
@@ -216,9 +224,6 @@ void loop()
       u16MotorSpeed2 = static_cast<uint16_t>(2*u16SpeedGlobal - 2*u16SpeedGlobal * dAlpha); //u16MotorSpeed2 = motor on the right
       u16MotorSpeed1 = u16SpeedGlobal;  //u16MotorSpeed1 = motor on the left
     }
-
-
-
     vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),
                       constrain(u16MotorSpeed2,0,4096));
   }
@@ -304,12 +309,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       } 
       else if (strcmp((char*)data, "end")== 0)
        {
+         bAutoMode = false;
          u16JoystickValue = 512;
        }
       else if (strcmp((char*)data, "auto")== 0)//activation du mode automatique
        {
          client->text("auto");  
           bAutoMode = true;
+       }
+      else if (strcmp((char*)data, "main")== 0)//activation du mode manuel
+       {
+         client->text("main");  
+          bAutoMode = false;
        }
       else
       {
