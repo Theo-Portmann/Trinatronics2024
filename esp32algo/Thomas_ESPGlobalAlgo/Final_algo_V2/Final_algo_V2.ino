@@ -1,17 +1,17 @@
 /**********************************************************************************
   Filename    : Final_Algo_V2.ino
-  Description : Use I2C to get orientation data from BNO085 and calculate 
-                aircraft inclination in degrees, and separated control motor speed 
-                using WebSocket on ESP32 C3 SuperMini.
+  Description : The code is controlled via a websocket connection and receives data 
+                via I2C from a BNO085 sensor. Depending on the mode, the code 
+                controls the speed of 2 motors.
 
   Good to know: To see serial monitor print, set DEBUG to 1.
   Author      : Thomas Eyer, Johan Maring
-  Creation    :  24/05/2024
-  Modification:  27/05/2024: amélioration du Websockets, ajout ping pong
-                 27/05/2024: implémentation code, controle moteur avec donée capteur
-                 31/05/2024: ajout de #define DEBUG 
-                 05/06/2024: correction et ajout de la commande bAutoMode
-                 16/07/2024: correction de ledcAttachChannel en ledcAttach
+  Creation    :  24/05/2024:  assembly of functional code prepared before
+  Modification:  27/05/2024: Websockets enhancement, ping pong added
+                 27/05/2024: code implementation, motor control with sensor data
+                 31/05/2024: added #define DEBUG, structuration of code
+                 05/06/2024: correction and addition of the mode selection command
+                 16/07/2024: correction of ledcAttachChannel to ledcAttach
 
 *********************************************************************************/
 #include <WiFi.h>
@@ -54,12 +54,12 @@ double dAlpha = 0.5;              // Alpha coefficient for motor control
 void setup() 
 {
   //------------------ Initializatin of Serial Monitor --------------------------
-  #if DEBUG   // Debug output to serial monitor
   Serial.begin(115200);
   while (!Serial)
   {
     delay(10); // Will pause ESP until serial console opens
   }
+  #if DEBUG   // Debug output to serial monitor
   Serial.println("Trinatronics 2024 test!");
   #endif     //DEBUG
   //------------------ Initialize wifi server and the WebSocket protocol---------
@@ -152,14 +152,14 @@ void loop()
       float pitch = asin(2.0 * (qw * qy - qz * qx)) * 180.0 / PI;
       float yaw   = atan2(2.0 * (qw * qz + qx * qy), 
                   1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
-      // uncomment if you want to print BNO085 data
-      // Serial.print("Roll: ");
-      
-      // Serial.print(roll);
-      // Serial.print(" Pitch: ");
-      // Serial.print(pitch);
-      // Serial.print(" Yaw: ");
-      // Serial.println(yaw);
+      #if DEBUG
+      Serial.print("Roll: ");
+      Serial.print(roll);
+      Serial.print(" Pitch: ");
+      Serial.print(pitch);
+      Serial.print(" Yaw: ");
+      Serial.println(yaw);
+      #endif // DEBUG
       //------------------ controll motor with BNO085 -------------------------------
       u16MotorSpeed = 3500;
       if (pitch > 20.0)
