@@ -5,19 +5,21 @@
                 using WebSocket on ESP32 C3 SuperMini.
 
   Good to know: To see serial monitor print, set DEBUG to 1
-                ERREUR: ledcAttachPin et ledcSetup non reconnu ???
   Author      : Thomas Eyer, Johan Maring
   Creation    :  24/05/2024
   Modification:  27/05/2024: amélioration du Websockets, ajout ping pong
                  27/05/2024: implémentation code, controle moteur avec donée capteur
                  31/05/2024: ajout de #define DEBUG 
+                 05/06/2024: correction et ajout de la commande bAutoMode
+                 16/07/2024: correction de ledcAttachChannel en ledcAttach
+
 *********************************************************************************/
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <Wire.h>
 #include <Adafruit_BNO08x.h>
 
-#define DEBUG 1                      // set 1 to see debug print at serial monitor
+#define DEBUG 1        // set 1 to see debug print at serial monitor
 
 // RST not use for I2C, so take -1 : notavalue
 #define BNO08X_RESET -1
@@ -31,21 +33,21 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 // Pin definition 
-uint16_t u16PinMotor1 = 2; // Define the pin to commande motor 1, at left
-uint16_t u16PinMotor2 = 4; // Define the pin to commande motor 2, at right
-int16_t u16Channel1 = 0; // PWM-channel for motor 1
-int16_t u16Channel2 = 0; // PWM channel for motor 2
+const uint16_t cu16Motor1Pin = 2;       // Define the pin to commande motor 1, at left
+const uint16_t cu16Motor2Pin = 4;       // Define the pin to commande motor 2, at right
+const uint16_t cu16Frequence = 1000;    // Define the frequence of PWM
+const uint16_t cu16Resolution = 12;     // Define the resolution in bit
 
 // Define of global variable
 uint16_t volatile u16JoystickValue = 512;    // Take the websocket give-value
 uint16_t u16SpeedGlobal = 0;      // Speed of right-joystick for both motor
-int16_t s16SpeedDifference = 0;  // based on left-joystick, change individual motor speed
+int16_t s16SpeedDifference = 0;   // based on left-joystick, change individual motor speed
 uint16_t u16MotorSpeed1 = 0;      // Speed variable of motor 1
 uint16_t u16MotorSpeed2 = 0;      // Speed variable of motor 2
 uint16_t u16MotorSpeed = 0;
 bool bAutoMode = false;           // Auto mode activation
 uint32_t u32TimeIncr = 0;
-double dAlpha = 0.5;            // Alpha coefficient for motor control
+double dAlpha = 0.5;              // Alpha coefficient for motor control
 
 // ********************************* SETUP **************************************
 void setup() 
@@ -103,15 +105,11 @@ void setup()
   }
   //------------------ Initialize motor controll --------------------------
   // Pin initialization for motor
-  pinMode(u16PinMotor1, OUTPUT);
-  pinMode(u16PinMotor2, OUTPUT);
-  // Set PWM to 12 bits for motors, range is 0-4095
-  ledcAttachChannel(u16PinMotor1, 1000, 12, u16Channel1);
-  // ledcSetup(u16Channel1, 1000, 12); // PWM frequency of 1000 Hz
-  // ledcAttachPin(u16PinMotor1, u16Channel1);
-  ledcAttachChannel(u16PinMotor2, 1000, 12, u16Channel2);
-  // ledcSetup(u16Channel2, 1000, 12);
-  // ledcAttachPin(u16PinMotor2, u16Channel2);
+  pinMode(cu16Motor1Pin, OUTPUT);
+  pinMode(cu16Motor2Pin, OUTPUT);
+  // Set parameter of PWM signal
+  ledcAttach(cu16Motor1Pin, cu16Frequence, cu16Resolution);
+  ledcAttach(cu16Motor2Pin, cu16Frequence, cu16Resolution);
   #if DEBUG // Debug output to serial monitor
   Serial.println("Setup complete, reading events and controlling motors");
   #endif // DEBUG
@@ -146,6 +144,7 @@ void loop()
                   1.0 - 2.0 * (qy * qy + qz * qz)) * 180.0 / PI;
       // uncomment if you want to print BNO085 data
       // Serial.print("Roll: ");
+      
       // Serial.print(roll);
       // Serial.print(" Pitch: ");
       // Serial.print(pitch);
@@ -199,7 +198,6 @@ void loop()
       }
     }
 
-
     // Calculate the speed of the motors based on the alpha coefficient and the global speed
     if (dAlpha == 0.5)
     {
@@ -216,11 +214,8 @@ void loop()
       u16MotorSpeed2 = static_cast<uint16_t>(2*u16SpeedGlobal - 2*u16SpeedGlobal * dAlpha); //u16MotorSpeed2 = motor on the right
       u16MotorSpeed1 = u16SpeedGlobal;  //u16MotorSpeed1 = motor on the left
     }
-
-
-
-    vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096),
-                      constrain(u16MotorSpeed2,0,4096));
+    vDriveThe2Motor(4095, 2048);
+    //vDriveThe2Motor(constrain(u16MotorSpeed1,0,4096), constrain(u16MotorSpeed2,0,4096));
   }
    u32TimeIncr++;
 }
@@ -234,12 +229,12 @@ void loop()
 **/
 void vDriveThe2Motor(uint32_t u16spdM1, uint32_t u16spdM2) 
 {
-  // Set Pull-down
-  digitalWrite(u16PinMotor1, LOW);   
-  digitalWrite(u16PinMotor2, LOW);       
+  // Sanity Check, pull down
+  digitalWrite(cu16Motor1Pin, LOW);   
+  digitalWrite(cu16Motor2Pin, LOW);       
   // Control motor rotation speed, PWM signal
-  ledcWrite(u16Channel1, u16spdM1);
-  ledcWrite(u16Channel2, u16spdM2);
+  ledcWrite(cu16Motor1Pin, u16spdM1);
+  ledcWrite(cu16Motor2Pin, u16spdM2);
 
    // Print motor speeds to Serial Monitor
   #if DEBUG
